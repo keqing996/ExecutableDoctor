@@ -43,7 +43,7 @@ class BinaryAnalyzer:
         self._setup_lldb()
         
         # Initialize components
-        self.symbol_extractor = SymbolExtractor(self.lldb, self.config.min_function_size)
+        self.symbol_extractor = SymbolExtractor(self.lldb)
         self.section_analyzer = SectionAnalyzer(self.lldb)
         self.report_generator = ReportGenerator()
     
@@ -127,25 +127,11 @@ class BinaryAnalyzer:
         self._ensure_target(binary_path)
         return self.section_analyzer.get_sections_info(self.target)
     
-    def sort_and_filter_functions(self, functions: List[Dict]) -> List[Dict]:
-        """Sort functions by size and return top N
-        
-        Args:
-            functions: List of function dictionaries
-            
-        Returns:
-            Sorted and filtered list of functions
-        """
-        return self.symbol_extractor.sort_and_filter_functions(
-            functions, self.config.top_functions
-        )
-    
     def generate_report(
         self, 
         functions: List[Dict], 
         binary_path: str, 
-        output_path: Optional[str] = None,
-        report_format: str = "markdown"
+        output_path: Optional[str] = None
     ) -> str:
         """Generate analysis report
         
@@ -153,7 +139,6 @@ class BinaryAnalyzer:
             functions: List of function dictionaries
             binary_path: Path to analyzed binary
             output_path: Optional output file path
-            report_format: Report format ('markdown' or 'json')
             
         Returns:
             Path to generated report file
@@ -164,11 +149,7 @@ class BinaryAnalyzer:
             ensure_output_directory(output_dir)
             
             suffix = "_analysis_report"
-            if report_format == "json":
-                suffix += ".json"
-                output_path = generate_output_filename(binary_path, output_dir, suffix).replace(".md", ".json")
-            else:
-                output_path = generate_output_filename(binary_path, output_dir, suffix)
+            output_path = generate_output_filename(binary_path, output_dir, suffix)
         
         # Get sections information
         print("Analyzing binary sections...")
@@ -186,15 +167,10 @@ class BinaryAnalyzer:
                 func['source_file'] = "Unknown"
                 func['line_number'] = 0
         
-        # Generate report
-        if report_format == "json":
-            self.report_generator.generate_json_report(
-                functions, sections, binary_path, output_path
-            )
-        else:
-            self.report_generator.generate_markdown_report(
-                functions, sections, binary_path, output_path
-            )
+        # Generate markdown report
+        self.report_generator.generate_markdown_report(
+            functions, sections, binary_path, output_path
+        )
         
         return output_path
     
@@ -224,7 +200,9 @@ class BinaryAnalyzer:
             print(f"Found {len(functions)} functions in total.")
             
             # Sort and filter functions
-            top_functions = self.sort_and_filter_functions(functions)
+            top_functions = self.symbol_extractor.sort_and_filter_functions(
+                functions, self.config.top_functions
+            )
             print(f"Selected top {len(top_functions)} functions by size.")
             
             # Generate report

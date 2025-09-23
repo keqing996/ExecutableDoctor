@@ -11,15 +11,13 @@ from .utils import format_size
 class SymbolExtractor:
     """Handles symbol and function extraction from binary files"""
     
-    def __init__(self, lldb_module, min_function_size: int = 4):
+    def __init__(self, lldb_module):
         """Initialize symbol extractor
         
         Args:
             lldb_module: LLDB module (imported dynamically)
-            min_function_size: Minimum function size in bytes
         """
         self.lldb = lldb_module
-        self.min_function_size = min_function_size
     
     def extract_functions_from_target(self, target) -> List[Dict]:
         """Extract function information from LLDB target
@@ -77,8 +75,6 @@ class SymbolExtractor:
             
             # Get symbol size
             size = symbol.GetSize()
-            if size < self.min_function_size:
-                return None
             
             # Get symbol name
             name = symbol.GetName()

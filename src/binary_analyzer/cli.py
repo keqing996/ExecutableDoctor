@@ -25,7 +25,7 @@ Examples:
   binary-analyzer binary.exe
   binary-analyzer binary.exe --output /tmp/reports/
   binary-analyzer binary.exe --top-functions 100 --no-source-info
-  binary-analyzer binary.exe --llvm-path /usr/local/llvm --format json
+  binary-analyzer binary.exe --llvm-path /usr/local/llvm
         """
     )
     
@@ -39,13 +39,6 @@ Examples:
     parser.add_argument(
         '--output', '-o',
         help='Output directory for the analysis report (default: <binary_dir>/output/)'
-    )
-    
-    parser.add_argument(
-        '--format', '-f',
-        choices=['markdown', 'json'],
-        default='markdown',
-        help='Report format (default: markdown)'
     )
     
     # Analysis options
@@ -62,13 +55,6 @@ Examples:
         help='Skip source file and line number lookup for faster analysis'
     )
     
-    parser.add_argument(
-        '--min-function-size',
-        type=int,
-        default=4,
-        help='Minimum function size in bytes (default: 4)'
-    )
-    
     # LLVM/LLDB options
     parser.add_argument(
         '--llvm-path',
@@ -80,12 +66,6 @@ Examples:
         '--verbose', '-v',
         action='store_true',
         help='Enable verbose output'
-    )
-    
-    parser.add_argument(
-        '--version',
-        action='version',
-        version='%(prog)s 1.0.0'
     )
     
     return parser
@@ -114,11 +94,6 @@ def validate_arguments(args) -> None:
     if args.top_functions <= 0:
         print(f"Error: --top-functions must be positive, got {args.top_functions}", file=sys.stderr)
         sys.exit(1)
-    
-    # Validate min_function_size argument
-    if args.min_function_size <= 0:
-        print(f"Error: --min-function-size must be positive, got {args.min_function_size}", file=sys.stderr)
-        sys.exit(1)
 
 
 def create_config_from_args(args) -> AnalysisConfig:
@@ -134,9 +109,7 @@ def create_config_from_args(args) -> AnalysisConfig:
         llvm_path=args.llvm_path,
         top_functions=args.top_functions,
         skip_source_info=args.no_source_info,
-        min_function_size=args.min_function_size,
-        output_dir=args.output,
-        report_format=args.format
+        output_dir=args.output
     )
 
 

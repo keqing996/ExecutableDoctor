@@ -18,11 +18,9 @@ class AnalysisConfig:
     # Analysis settings
     top_functions: int = 200
     skip_source_info: bool = False
-    min_function_size: int = 4
     
     # Output settings
     output_dir: Optional[str] = None
-    report_format: str = "markdown"
     
     # Performance settings
     batch_size: int = 100

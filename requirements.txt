@@ -1,3 +1,6 @@
 # Production dependencies
 # LLDB is typically installed as part of LLVM toolkit
 # No additional Python dependencies for core functionality
+
+# Optional dependencies for enhanced functionality
+pyelftools>=0.29

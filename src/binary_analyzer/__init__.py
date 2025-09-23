@@ -15,6 +15,9 @@ from .exceptions import (
     LLDBError,
     BinaryNotFoundError,
     TargetCreationError,
+    SectionAnalysisError,
+    SymbolExtractionError,
+    ReportGenerationError,
 )
 
 __all__ = [
@@ -24,4 +27,7 @@ __all__ = [
     "LLDBError",
     "BinaryNotFoundError",
     "TargetCreationError",
+    "SectionAnalysisError",
+    "SymbolExtractionError", 
+    "ReportGenerationError",
 ]
