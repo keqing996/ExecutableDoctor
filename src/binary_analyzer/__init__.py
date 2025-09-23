@@ -10,6 +10,7 @@ __author__ = "Binary Analyzer Team"
 
 from .analyzer import BinaryAnalyzer
 from .config import AnalysisConfig
+from .imports_exports import ImportExportAnalyzer
 from .exceptions import (
     BinaryAnalyzerError,
     LLDBError,
@@ -23,6 +24,7 @@ from .exceptions import (
 __all__ = [
     "BinaryAnalyzer",
     "AnalysisConfig", 
+    "ImportExportAnalyzer",
     "BinaryAnalyzerError",
     "LLDBError",
     "BinaryNotFoundError",

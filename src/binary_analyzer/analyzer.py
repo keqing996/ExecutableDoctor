@@ -21,6 +21,7 @@ from .utils import (
 )
 from .symbols import SymbolExtractor
 from .sections import SectionAnalyzer
+from .imports_exports import ImportExportAnalyzer
 from .report import ReportGenerator
 
 
@@ -45,6 +46,7 @@ class BinaryAnalyzer:
         # Initialize components
         self.symbol_extractor = SymbolExtractor(self.lldb)
         self.section_analyzer = SectionAnalyzer(self.lldb)
+        self.import_export_analyzer = ImportExportAnalyzer(self.lldb)
         self.report_generator = ReportGenerator()
     
     def __del__(self):
@@ -127,6 +129,30 @@ class BinaryAnalyzer:
         self._ensure_target(binary_path)
         return self.section_analyzer.get_sections_info(self.target)
     
+    def get_imports_info(self, binary_path: str) -> List[Dict]:
+        """Get import table information from the binary file
+        
+        Args:
+            binary_path: Path to binary file
+            
+        Returns:
+            List of import dictionaries
+        """
+        self._ensure_target(binary_path)
+        return self.import_export_analyzer.extract_imports(self.target, binary_path)
+    
+    def get_exports_info(self, binary_path: str) -> List[Dict]:
+        """Get export table information from the binary file
+        
+        Args:
+            binary_path: Path to binary file
+            
+        Returns:
+            List of export dictionaries
+        """
+        self._ensure_target(binary_path)
+        return self.import_export_analyzer.extract_exports(self.target, binary_path)
+    
     def generate_report(
         self, 
         functions: List[Dict], 
@@ -151,9 +177,37 @@ class BinaryAnalyzer:
             suffix = "_analysis_report"
             output_path = generate_output_filename(binary_path, output_dir, suffix)
         
+        # Get output directory for CSV files
+        output_dir = os.path.dirname(output_path)
+        binary_name = os.path.basename(binary_path)
+        
         # Get sections information
         print("Analyzing binary sections...")
         sections = self.get_sections_info(binary_path)
+        
+        # Get imports information
+        print("Analyzing import table...")
+        imports = self.get_imports_info(binary_path)
+        
+        # Get exports information
+        print("Analyzing export table...")
+        exports = self.get_exports_info(binary_path)
+        
+        # Save imports and exports to CSV files
+        imports_csv_path = None
+        exports_csv_path = None
+        
+        if imports:
+            imports_csv_path = self.import_export_analyzer.save_imports_csv(
+                imports, output_dir, binary_name
+            )
+            print(f"Imports CSV saved to: {imports_csv_path}")
+        
+        if exports:
+            exports_csv_path = self.import_export_analyzer.save_exports_csv(
+                exports, output_dir, binary_name
+            )
+            print(f"Exports CSV saved to: {exports_csv_path}")
         
         # Get source information for functions
         if not self.config.skip_source_info:
@@ -169,7 +223,7 @@ class BinaryAnalyzer:
         
         # Generate markdown report
         self.report_generator.generate_markdown_report(
-            functions, sections, binary_path, output_path
+            functions, sections, imports, exports, binary_path, output_path
         )
         
         return output_path
