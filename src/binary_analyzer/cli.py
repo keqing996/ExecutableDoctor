@@ -1,0 +1,199 @@
+"""
+Command Line Interface for Binary Analyzer
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+from .analyzer import BinaryAnalyzer
+from .config import AnalysisConfig
+from .exceptions import BinaryAnalyzerError
+
+
+def create_parser() -> argparse.ArgumentParser:
+    """Create command line argument parser
+    
+    Returns:
+        Configured ArgumentParser
+    """
+    parser = argparse.ArgumentParser(
+        description="Analyze PE and ELF binary files to extract function information using LLDB.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  binary-analyzer binary.exe
+  binary-analyzer binary.exe --output /tmp/reports/
+  binary-analyzer binary.exe --top-functions 100 --no-source-info
+  binary-analyzer binary.exe --llvm-path /usr/local/llvm --format json
+        """
+    )
+    
+    # Required arguments
+    parser.add_argument(
+        'binary_path',
+        help='Path to the binary file to analyze (PE or ELF)'
+    )
+    
+    # Output options
+    parser.add_argument(
+        '--output', '-o',
+        help='Output directory for the analysis report (default: <binary_dir>/output/)'
+    )
+    
+    parser.add_argument(
+        '--format', '-f',
+        choices=['markdown', 'json'],
+        default='markdown',
+        help='Report format (default: markdown)'
+    )
+    
+    # Analysis options
+    parser.add_argument(
+        '--top-functions', '-n',
+        type=int,
+        default=200,
+        help='Number of top functions to include in the report (default: 200)'
+    )
+    
+    parser.add_argument(
+        '--no-source-info',
+        action='store_true',
+        help='Skip source file and line number lookup for faster analysis'
+    )
+    
+    parser.add_argument(
+        '--min-function-size',
+        type=int,
+        default=4,
+        help='Minimum function size in bytes (default: 4)'
+    )
+    
+    # LLVM/LLDB options
+    parser.add_argument(
+        '--llvm-path',
+        help='Path to LLVM installation (default: use LLVM_PATH environment variable)'
+    )
+    
+    # Verbosity options
+    parser.add_argument(
+        '--verbose', '-v',
+        action='store_true',
+        help='Enable verbose output'
+    )
+    
+    parser.add_argument(
+        '--version',
+        action='version',
+        version='%(prog)s 1.0.0'
+    )
+    
+    return parser
+
+
+def validate_arguments(args) -> None:
+    """Validate command line arguments
+    
+    Args:
+        args: Parsed arguments
+        
+    Raises:
+        SystemExit: If validation fails
+    """
+    # Validate binary file exists
+    binary_path = Path(args.binary_path)
+    if not binary_path.exists():
+        print(f"Error: Binary file '{args.binary_path}' not found.", file=sys.stderr)
+        sys.exit(1)
+    
+    if not binary_path.is_file():
+        print(f"Error: '{args.binary_path}' is not a file.", file=sys.stderr)
+        sys.exit(1)
+    
+    # Validate top_functions argument
+    if args.top_functions <= 0:
+        print(f"Error: --top-functions must be positive, got {args.top_functions}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Validate min_function_size argument
+    if args.min_function_size <= 0:
+        print(f"Error: --min-function-size must be positive, got {args.min_function_size}", file=sys.stderr)
+        sys.exit(1)
+
+
+def create_config_from_args(args) -> AnalysisConfig:
+    """Create AnalysisConfig from command line arguments
+    
+    Args:
+        args: Parsed arguments
+        
+    Returns:
+        AnalysisConfig object
+    """
+    return AnalysisConfig(
+        llvm_path=args.llvm_path,
+        top_functions=args.top_functions,
+        skip_source_info=args.no_source_info,
+        min_function_size=args.min_function_size,
+        output_dir=args.output,
+        report_format=args.format
+    )
+
+
+def main() -> int:
+    """Main entry point for CLI
+    
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    try:
+        # Parse arguments
+        parser = create_parser()
+        args = parser.parse_args()
+        
+        # Validate arguments
+        validate_arguments(args)
+        
+        # Create configuration
+        config = create_config_from_args(args)
+        
+        if args.verbose:
+            print(f"Analyzing binary: {args.binary_path}")
+            print(f"Output format: {args.format}")
+            print(f"Top functions: {args.top_functions}")
+            print(f"Skip source info: {args.no_source_info}")
+            if args.llvm_path:
+                print(f"LLVM path: {args.llvm_path}")
+        
+        # Initialize analyzer
+        analyzer = BinaryAnalyzer(config)
+        
+        # Perform analysis
+        result = analyzer.full_analysis(args.binary_path)
+        
+        if result['success']:
+            print(f"\n✓ Analysis completed successfully!")
+            print(f"✓ Found {result['functions_count']} functions total")
+            print(f"✓ Report shows top {result['top_functions_count']} functions")
+            print(f"✓ Report saved to: {result['report_path']}")
+            return 0
+        else:
+            print(f"\n✗ Analysis failed: {result['message']}", file=sys.stderr)
+            return 1
+            
+    except BinaryAnalyzerError as e:
+        print(f"\n✗ Binary Analyzer Error: {e}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\n✗ Analysis interrupted by user", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"\n✗ Unexpected error: {e}", file=sys.stderr)
+        if args.verbose if 'args' in locals() else False:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
