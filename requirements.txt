@@ -2,5 +2,11 @@
 # LLDB is typically installed as part of LLVM toolkit
 # No additional Python dependencies for core functionality
 
-# Optional dependencies for enhanced functionality
+# Required dependencies for import/export table analysis
+pefile>=2023.2.7
 pyelftools>=0.29
+
+# Optional dependencies for enhanced functionality
+
+# Development dependencies (install with: pip install -r requirements-dev.txt)
+# Or use: pip install -e ".[dev]" with pyproject.toml

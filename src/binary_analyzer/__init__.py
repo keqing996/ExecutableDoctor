@@ -19,6 +19,8 @@ from .exceptions import (
     SectionAnalysisError,
     SymbolExtractionError,
     ReportGenerationError,
+    ConfigurationError,
+    ValidationError,
 )
 
 __all__ = [
@@ -32,4 +34,31 @@ __all__ = [
     "SectionAnalysisError",
     "SymbolExtractionError", 
     "ReportGenerationError",
+    "ConfigurationError",
+    "ValidationError",
 ]
+
+
+# Version information
+def get_version() -> str:
+    """Get package version
+    
+    Returns:
+        Version string
+    """
+    return __version__
+
+
+# Package metadata
+PACKAGE_INFO = {
+    "name": "binary-analyzer",
+    "version": __version__,
+    "author": __author__,
+    "description": "A comprehensive binary file analyzer using LLDB",
+    "python_requires": ">=3.7",
+    "dependencies": [
+        "lldb",  # Optional, provided by LLVM installation
+        "pefile",  # Optional, for PE file analysis
+        "pyelftools",  # Optional, for ELF file analysis
+    ]
+}

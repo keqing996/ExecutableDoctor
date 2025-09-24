@@ -3,7 +3,7 @@ Main Binary Analyzer class
 """
 
 import os
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any, Union
 
 from .config import AnalysisConfig
 from .exceptions import (
@@ -28,38 +28,38 @@ from .report import ReportGenerator
 class BinaryAnalyzer:
     """Main binary file analyzer using LLDB"""
     
-    def __init__(self, config: Optional[AnalysisConfig] = None):
+    def __init__(self, config: Optional[AnalysisConfig] = None) -> None:
         """Initialize the analyzer
         
         Args:
             config: Analysis configuration object
         """
-        self.config = config or AnalysisConfig()
-        self.lldb = None
-        self.debugger = None
-        self.target = None
-        self.current_binary_path = None
+        self.config: AnalysisConfig = config or AnalysisConfig()
+        self.lldb: Optional[Any] = None
+        self.debugger: Optional[Any] = None
+        self.target: Optional[Any] = None
+        self.current_binary_path: Optional[str] = None
         
         # Initialize LLDB
         self._setup_lldb()
         
         # Initialize components
-        self.symbol_extractor = SymbolExtractor(self.lldb)
-        self.section_analyzer = SectionAnalyzer(self.lldb)
-        self.import_export_analyzer = ImportExportAnalyzer(self.lldb)
-        self.report_generator = ReportGenerator()
+        self.symbol_extractor: 'SymbolExtractor' = SymbolExtractor(self.lldb)
+        self.section_analyzer: 'SectionAnalyzer' = SectionAnalyzer(self.lldb)
+        self.import_export_analyzer: 'ImportExportAnalyzer' = ImportExportAnalyzer(self.lldb)
+        self.report_generator: 'ReportGenerator' = ReportGenerator()
     
-    def __del__(self):
+    def __del__(self) -> None:
         """Destructor to clean up LLDB resources"""
         self._cleanup()
     
-    def _setup_lldb(self):
+    def _setup_lldb(self) -> None:
         """Setup LLDB Python bindings"""
         setup_lldb_path(self.config.llvm_path)
         self.lldb = import_lldb()
         print("LLDB Python bindings loaded successfully.")
     
-    def _cleanup(self):
+    def _cleanup(self) -> None:
         """Clean up LLDB debugger and target"""
         if self.debugger:
             self.debugger.Destroy(self.debugger)
@@ -67,7 +67,7 @@ class BinaryAnalyzer:
             self.target = None
             self.current_binary_path = None
     
-    def _ensure_target(self, binary_path: str):
+    def _ensure_target(self, binary_path: str) -> None:
         """Ensure target is created for the given binary path
         
         Args:
@@ -92,7 +92,7 @@ class BinaryAnalyzer:
             print(f"Created target for: {binary_path}")
             print(f"Architecture: {self.target.GetTriple()}")
     
-    def analyze_binary(self, binary_path: str) -> List[Dict]:
+    def analyze_binary(self, binary_path: str) -> List[Dict[str, Any]]:
         """Analyze binary file and extract function information
         
         Args:
@@ -117,7 +117,7 @@ class BinaryAnalyzer:
         
         return functions
     
-    def get_sections_info(self, binary_path: str) -> List[Dict]:
+    def get_sections_info(self, binary_path: str) -> List[Dict[str, Any]]:
         """Get information about sections in the binary file
         
         Args:
@@ -129,7 +129,7 @@ class BinaryAnalyzer:
         self._ensure_target(binary_path)
         return self.section_analyzer.get_sections_info(self.target)
     
-    def get_imports_info(self, binary_path: str) -> List[Dict]:
+    def get_imports_info(self, binary_path: str) -> List[Dict[str, Any]]:
         """Get import table information from the binary file
         
         Args:
@@ -141,7 +141,7 @@ class BinaryAnalyzer:
         self._ensure_target(binary_path)
         return self.import_export_analyzer.extract_imports(self.target, binary_path)
     
-    def get_exports_info(self, binary_path: str) -> List[Dict]:
+    def get_exports_info(self, binary_path: str) -> List[Dict[str, Any]]:
         """Get export table information from the binary file
         
         Args:
@@ -155,7 +155,7 @@ class BinaryAnalyzer:
     
     def generate_report(
         self, 
-        functions: List[Dict], 
+        functions: List[Dict[str, Any]], 
         binary_path: str, 
         output_path: Optional[str] = None
     ) -> str:
@@ -228,7 +228,7 @@ class BinaryAnalyzer:
         
         return output_path
     
-    def full_analysis(self, binary_path: str, output_path: Optional[str] = None) -> Dict:
+    def full_analysis(self, binary_path: str, output_path: Optional[str] = None) -> Dict[str, Any]:
         """Perform complete binary analysis
         
         Args:

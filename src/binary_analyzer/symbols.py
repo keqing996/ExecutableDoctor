@@ -2,16 +2,16 @@
 Symbol and function extraction functionality
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 from .exceptions import SymbolExtractionError
-from .utils import format_size
+from .utils import format_size, format_hex_address, is_valid_address
 
 
 class SymbolExtractor:
     """Handles symbol and function extraction from binary files"""
     
-    def __init__(self, lldb_module):
+    def __init__(self, lldb_module: Any) -> None:
         """Initialize symbol extractor
         
         Args:
@@ -19,7 +19,7 @@ class SymbolExtractor:
         """
         self.lldb = lldb_module
     
-    def extract_functions_from_target(self, target) -> List[Dict]:
+    def extract_functions_from_target(self, target: Any) -> List[Dict[str, Any]]:
         """Extract function information from LLDB target
         
         Args:
@@ -27,18 +27,26 @@ class SymbolExtractor:
             
         Returns:
             List of function dictionaries
+            
+        Raises:
+            SymbolExtractionError: If extraction fails
         """
-        functions = []
+        if not target or not target.IsValid():
+            raise SymbolExtractionError("Invalid LLDB target provided")
+        
+        functions: List[Dict[str, Any]] = []
         
         try:
             # Iterate through all modules
             for module in target.module_iter():
-                print(f"Processing module: {module.GetFileSpec().GetFilename()}")
+                module_name = module.GetFileSpec().GetFilename() if module.IsValid() else "Unknown"
+                print(f"Processing module: {module_name}")
                 
                 # Get symbols from the module
-                for sym_idx in range(module.GetNumSymbols()):
+                num_symbols = module.GetNumSymbols()
+                for sym_idx in range(num_symbols):
                     symbol = module.GetSymbolAtIndex(sym_idx)
-                    if symbol.IsValid():
+                    if symbol and symbol.IsValid():
                         # Check if it's a function symbol
                         if symbol.GetType() == self.lldb.eSymbolTypeCode:
                             func_info = self._extract_symbol_info(symbol, target)
@@ -50,7 +58,7 @@ class SymbolExtractor:
         
         return functions
     
-    def _extract_symbol_info(self, symbol, target) -> Optional[Dict]:
+    def _extract_symbol_info(self, symbol: Any, target: Any) -> Optional[Dict[str, Any]]:
         """Extract information from an LLDB symbol object
         
         Args:
@@ -63,18 +71,20 @@ class SymbolExtractor:
         try:
             # Get symbol address
             addr = symbol.GetStartAddress()
-            if not addr.IsValid():
+            if not addr or not addr.IsValid():
                 return None
             
             start_offset = addr.GetFileAddress()
             if start_offset == self.lldb.LLDB_INVALID_ADDRESS:
                 start_offset = addr.GetLoadAddress(target)
             
-            if start_offset == self.lldb.LLDB_INVALID_ADDRESS:
+            if start_offset == self.lldb.LLDB_INVALID_ADDRESS or not is_valid_address(start_offset):
                 return None
             
             # Get symbol size
             size = symbol.GetSize()
+            if size <= 0:
+                size = 1  # Default minimum size
             
             # Get symbol name
             name = symbol.GetName()
@@ -82,18 +92,20 @@ class SymbolExtractor:
                 name = f"sym_{start_offset:x}"
             
             return {
-                'name': name,
-                'address': f"0x{start_offset:x}",
-                'size': size,
-                'start_offset': start_offset,
-                'end_offset': start_offset + size,
-                'type': 'symbol'
+                'name': str(name),
+                'address': format_hex_address(start_offset),
+                'size': int(size),
+                'start_offset': int(start_offset),
+                'end_offset': int(start_offset + size),
+                'type': 'symbol',
+                'source_file': "Unknown",  # Will be filled later if needed
+                'line_number': 0  # Will be filled later if needed
             }
         except Exception as e:
             print(f"Error extracting symbol info: {e}")
             return None
     
-    def sort_and_filter_functions(self, functions: List[Dict], top_n: int = 200) -> List[Dict]:
+    def sort_and_filter_functions(self, functions: List[Dict[str, Any]], top_n: int = 200) -> List[Dict[str, Any]]:
         """Sort functions by size (largest first) and return top N
         
         Args:
@@ -102,14 +114,26 @@ class SymbolExtractor:
             
         Returns:
             Sorted and filtered list of functions
+            
+        Raises:
+            ValueError: If top_n is not positive
         """
+        if top_n <= 0:
+            raise ValueError("top_n must be positive")
+        
+        if not functions:
+            return []
+        
         # Sort by size in descending order
-        sorted_functions = sorted(functions, key=lambda x: x['size'], reverse=True)
+        try:
+            sorted_functions = sorted(functions, key=lambda x: x.get('size', 0), reverse=True)
+        except (KeyError, TypeError) as e:
+            raise SymbolExtractionError(f"Error sorting functions: {e}")
         
         # Return top N functions
         return sorted_functions[:top_n]
     
-    def get_source_info_batch(self, functions: List[Dict], target, skip_source_info: bool = False) -> None:
+    def get_source_info_batch(self, functions: List[Dict[str, Any]], target: Any, skip_source_info: bool = False) -> None:
         """Get source information for functions in batch
         
         Args:
@@ -124,28 +148,35 @@ class SymbolExtractor:
                 func['line_number'] = 0
             return
         
+        if not functions:
+            return
+        
         print(f"Getting source information for {len(functions)} functions...")
         
         # Simple approach: try to get source info for each function individually
-        file_spec_cache = {}
+        file_spec_cache: Dict[str, str] = {}
         
         for i, func in enumerate(functions):
             try:
-                start_offset = func['start_offset']
+                start_offset = func.get('start_offset')
+                if not is_valid_address(start_offset):
+                    func['source_file'] = "Unknown"
+                    func['line_number'] = 0
+                    continue
                 
                 # Create address and try to resolve it
                 addr = target.ResolveFileAddress(start_offset)
-                if addr.IsValid():
+                if addr and addr.IsValid():
                     line_entry = addr.GetLineEntry()
-                    if line_entry.IsValid():
+                    if line_entry and line_entry.IsValid():
                         file_spec = line_entry.GetFileSpec()
-                        if file_spec.IsValid():
+                        if file_spec and file_spec.IsValid():
                             # Use caching for file specs
-                            file_key = f"{file_spec.GetDirectory()}_{file_spec.GetFilename()}"
+                            directory = file_spec.GetDirectory() or ""
+                            filename = file_spec.GetFilename() or "Unknown"
+                            file_key = f"{directory}_{filename}"
                             
                             if file_key not in file_spec_cache:
-                                directory = file_spec.GetDirectory() or ""
-                                filename = file_spec.GetFilename() or "Unknown"
                                 if directory and filename:
                                     source_file = f"{directory}\\{filename}".replace("/", "\\")
                                 else:
@@ -164,7 +195,8 @@ class SymbolExtractor:
                     func['source_file'] = "Unknown"
                     func['line_number'] = 0
                     
-            except Exception:
+            except Exception as e:
+                print(f"Warning: Error getting source info for function {func.get('name', 'unknown')}: {e}")
                 func['source_file'] = "Unknown"
                 func['line_number'] = 0
             

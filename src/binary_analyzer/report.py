@@ -4,10 +4,10 @@ Report generation functionality
 
 import datetime
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional, Any
 
 from .exceptions import ReportGenerationError
-from .utils import format_size
+from .utils import format_size, sanitize_filename
 from .config import (
     REPORT_HEADER_TEMPLATE,
     SECTIONS_TABLE_HEADER,
@@ -18,16 +18,16 @@ from .config import (
 class ReportGenerator:
     """Handles markdown report generation"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize report generator"""
         pass
     
     def generate_markdown_report(
         self, 
-        functions: List[Dict], 
-        sections: List[Dict],
-        imports: List[Dict],
-        exports: List[Dict],
+        functions: List[Dict[str, Any]], 
+        sections: List[Dict[str, Any]],
+        imports: List[Dict[str, Any]],
+        exports: List[Dict[str, Any]],
         binary_path: str, 
         output_path: str
     ) -> None:
@@ -40,8 +40,14 @@ class ReportGenerator:
             exports: List of export dictionaries
             binary_path: Path to analyzed binary
             output_path: Output file path
+            
+        Raises:
+            ReportGenerationError: If report generation fails
         """
         try:
+            if not binary_path or not output_path:
+                raise ReportGenerationError("Binary path and output path are required")
+            
             binary_name = os.path.basename(binary_path)
             
             # Generate report header
@@ -49,8 +55,8 @@ class ReportGenerator:
                 binary_name=binary_name,
                 binary_path=binary_path,
                 analysis_date=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                total_functions=len(functions),
-                report_functions=len(functions)
+                total_functions=len(functions) if functions else 0,
+                report_functions=len(functions) if functions else 0
             )
             
             # Add sections information
@@ -78,6 +84,31 @@ class ReportGenerator:
             report_content += detailed_content
             
             # Write report to file
+            self._write_report_to_file(report_content, output_path)
+            
+        except Exception as e:
+            raise ReportGenerationError(f"Error generating report: {e}")
+    
+    def _write_report_to_file(self, content: str, output_path: str) -> None:
+        """Write report content to file
+        
+        Args:
+            content: Report content to write
+            output_path: Output file path
+            
+        Raises:
+            ReportGenerationError: If file writing fails
+        """
+        try:
+            # Ensure output directory exists
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+            
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+        except (OSError, IOError) as e:
+            raise ReportGenerationError(f"Error writing report to file: {e}")
             self._write_report_file(report_content, output_path)
             
             print(f"Markdown report generated: {output_path}")

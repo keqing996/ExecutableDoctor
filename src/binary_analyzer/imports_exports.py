@@ -4,31 +4,31 @@ Import and Export table analysis functionality
 
 import csv
 import os
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional, Union, Any
 
 try:
-    import pefile
+    import pefile  # type: ignore
     PEFILE_AVAILABLE = True
 except ImportError:
     PEFILE_AVAILABLE = False
 
 try:
-    from elftools.elf.elffile import ELFFile
-    from elftools.elf.sections import SymbolTableSection
-    from elftools.elf.relocation import RelocationSection
-    from elftools.elf.dynamic import DynamicSection
+    from elftools.elf.elffile import ELFFile  # type: ignore
+    from elftools.elf.sections import SymbolTableSection  # type: ignore
+    from elftools.elf.relocation import RelocationSection  # type: ignore
+    from elftools.elf.dynamic import DynamicSection  # type: ignore
     ELFTOOLS_AVAILABLE = True
 except ImportError:
     ELFTOOLS_AVAILABLE = False
 
-from .exceptions import SectionAnalysisError
-from .utils import sanitize_filename
+from .exceptions import SectionAnalysisError, ValidationError
+from .utils import sanitize_filename, validate_file_permissions
 
 
 class ImportExportAnalyzer:
     """Handles import and export table analysis for PE and ELF files"""
     
-    def __init__(self, lldb_module=None):
+    def __init__(self, lldb_module: Optional[Any] = None) -> None:
         """Initialize import/export analyzer
         
         Args:
@@ -36,7 +36,7 @@ class ImportExportAnalyzer:
         """
         self.lldb = lldb_module
     
-    def extract_imports(self, target, binary_path: str) -> List[Dict]:
+    def extract_imports(self, target: Any, binary_path: str) -> List[Dict[str, Any]]:
         """Extract import table information from binary file
         
         Args:
@@ -45,9 +45,16 @@ class ImportExportAnalyzer:
             
         Returns:
             List of import dictionaries with keys: dll_name, function_name, address, ordinal
+            
+        Raises:
+            SectionAnalysisError: If extraction fails
+            ValidationError: If file validation fails
         """
-        if not os.path.exists(binary_path):
+        if not binary_path or not os.path.exists(binary_path):
             raise SectionAnalysisError(f"Binary file not found: {binary_path}")
+        
+        if not validate_file_permissions(binary_path):
+            raise ValidationError(f"Cannot read binary file: {binary_path}")
         
         # Detect file type and use appropriate parser
         if self._is_pe_file(binary_path):
@@ -57,7 +64,7 @@ class ImportExportAnalyzer:
         else:
             raise SectionAnalysisError(f"Unsupported file format: {binary_path}")
     
-    def extract_exports(self, target, binary_path: str) -> List[Dict]:
+    def extract_exports(self, target: Any, binary_path: str) -> List[Dict[str, Any]]:
         """Extract export table information from binary file
         
         Args:

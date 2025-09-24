@@ -5,7 +5,7 @@ Utility functions for Binary Analyzer
 import os
 import sys
 import platform
-from typing import Optional
+from typing import Optional, Any
 
 from .config import get_default_lldb_python_path, BYTES_IN_MB
 from .exceptions import LLDBError
@@ -19,10 +19,17 @@ def setup_lldb_path(llvm_path: Optional[str] = None) -> None:
             sys.path.insert(0, lldb_python_path)
 
 
-def import_lldb():
-    """Import LLDB with proper error handling"""
+def import_lldb() -> Any:
+    """Import LLDB with proper error handling
+    
+    Returns:
+        LLDB module
+        
+    Raises:
+        LLDBError: If LLDB import fails
+    """
     try:
-        import lldb
+        import lldb  # type: ignore
         return lldb
     except ImportError as e:
         raise LLDBError(
@@ -60,15 +67,98 @@ def get_default_output_dir(binary_path: str) -> str:
 
 
 def print_progress(current: int, total: int, prefix: str = "Progress") -> None:
-    """Print progress indicator"""
+    """Print progress indicator
+    
+    Args:
+        current: Current progress count
+        total: Total count
+        prefix: Progress message prefix
+    """
     if total > 10 and current % max(1, total // 10) == 0:
         progress = (current / total) * 100
         print(f"{prefix}: {progress:.0f}% ({current}/{total})", end='\r')
         
         
 def sanitize_filename(filename: str) -> str:
-    """Sanitize filename to remove invalid characters"""
+    """Sanitize filename to remove invalid characters
+    
+    Args:
+        filename: Original filename
+        
+    Returns:
+        Sanitized filename with invalid characters replaced
+    """
+    if not filename:
+        return "unnamed_file"
+    
     invalid_chars = '<>:"/\\|?*'
+    sanitized = filename
     for char in invalid_chars:
-        filename = filename.replace(char, '_')
-    return filename
+        sanitized = sanitized.replace(char, '_')
+    
+    # Remove any leading/trailing whitespace and dots
+    sanitized = sanitized.strip(' .')
+    
+    # Ensure filename is not empty after sanitization
+    if not sanitized:
+        return "unnamed_file"
+    
+    return sanitized
+
+
+def validate_file_permissions(file_path: str) -> bool:
+    """Validate that file has read permissions
+    
+    Args:
+        file_path: Path to file to check
+        
+    Returns:
+        True if file is readable, False otherwise
+    """
+    try:
+        return os.access(file_path, os.R_OK)
+    except (OSError, IOError):
+        return False
+
+
+def get_file_size(file_path: str) -> Optional[int]:
+    """Get file size in bytes
+    
+    Args:
+        file_path: Path to file
+        
+    Returns:
+        File size in bytes, or None if file doesn't exist or error occurred
+    """
+    try:
+        return os.path.getsize(file_path)
+    except (OSError, IOError):
+        return None
+
+
+def format_hex_address(address: int) -> str:
+    """Format address as hexadecimal string
+    
+    Args:
+        address: Memory address as integer
+        
+    Returns:
+        Formatted hexadecimal address string
+    """
+    return f"0x{address:x}" if address >= 0 else f"-0x{abs(address):x}"
+
+
+def is_valid_address(address: Any) -> bool:
+    """Check if address is valid
+    
+    Args:
+        address: Address to validate
+        
+    Returns:
+        True if address is valid, False otherwise
+    """
+    try:
+        addr_int = int(address) if not isinstance(address, int) else address
+        return addr_int >= 0
+    except (ValueError, TypeError):
+        return False

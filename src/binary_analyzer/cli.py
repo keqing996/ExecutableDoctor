@@ -5,6 +5,7 @@ Command Line Interface for Binary Analyzer
 import argparse
 import sys
 from pathlib import Path
+from typing import Union
 
 from .analyzer import BinaryAnalyzer
 from .config import AnalysisConfig
@@ -61,17 +62,10 @@ Examples:
         help='Path to LLVM installation (default: use LLVM_PATH environment variable)'
     )
     
-    # Verbosity options
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Enable verbose output'
-    )
-    
     return parser
 
 
-def validate_arguments(args) -> None:
+def validate_arguments(args: argparse.Namespace) -> None:
     """Validate command line arguments
     
     Args:
@@ -96,7 +90,7 @@ def validate_arguments(args) -> None:
         sys.exit(1)
 
 
-def create_config_from_args(args) -> AnalysisConfig:
+def create_config_from_args(args: argparse.Namespace) -> AnalysisConfig:
     """Create AnalysisConfig from command line arguments
     
     Args:
@@ -130,14 +124,6 @@ def main() -> int:
         # Create configuration
         config = create_config_from_args(args)
         
-        if args.verbose:
-            print(f"Analyzing binary: {args.binary_path}")
-            print(f"Output format: {args.format}")
-            print(f"Top functions: {args.top_functions}")
-            print(f"Skip source info: {args.no_source_info}")
-            if args.llvm_path:
-                print(f"LLVM path: {args.llvm_path}")
-        
         # Initialize analyzer
         analyzer = BinaryAnalyzer(config)
         
@@ -162,9 +148,6 @@ def main() -> int:
         return 1
     except Exception as e:
         print(f"\n✗ Unexpected error: {e}", file=sys.stderr)
-        if args.verbose if 'args' in locals() else False:
-            import traceback
-            traceback.print_exc()
         return 1
 
 
