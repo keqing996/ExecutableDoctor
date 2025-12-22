@@ -1,108 +1,163 @@
 # ExecutableDoctor
 
-A lightweight toolkit for inspecting native binaries with LLDB. ExecutableDoctor parses PE and ELF executables, ranks the largest functions, summarizes sections, and exports rich reports you can explore or share.
+A toolkit for analyzing PE and ELF executable files.
 
-## What's inside
+## Project Structure
 
-- **LLDB-powered analysis** — attach to a binary and walk its symbols, even without debug info.
-- **Cross-platform file support** — understands PE (Windows) and ELF (Linux/macOS) formats.
-- **Rich reporting** — produces Markdown summaries alongside CSV exports for imports/exports.
-- **Modular building blocks** — reuse `BinaryAnalyzer`, `SectionAnalyzer`, `SymbolExtractor`, and friends in your own scripts.
+```
+ExecutableDoctor/
+├── builder.py                          # PyInstaller build script
+├── src/
+│   ├── section_doctor.py              # CLI entry point (wrapper)
+│   └── executable_doctor/             # Core package
+│       ├── __init__.py                # Package export interface
+│       ├── analyzer.py                # Abstract base class ExecutableAnalyzer
+│       ├── pe_analyzer.py             # PE format analyzer
+│       ├── elf_analyzer.py            # ELF format analyzer
+│       └── utils.py                   # Shared utility functions
+├── artifact/                          # Output directory for packaged executables
+└── build/                             # PyInstaller build temporary files
+```
 
-The core package lives in `src/binary_analyzer/` and is organized into focused modules for symbols, sections, import/export tables, report generation, and CLI orchestration.
+## Architecture Design
 
-## Prerequisites
+### Polymorphic Design
 
-| Requirement | Notes |
-| --- | --- |
-| Python ≥ 3.8 | The package metadata supports 3.7+, but 3.8+ is recommended. |
-| LLDB Python bindings | Install via an LLVM toolchain. On macOS they ship with Xcode Command Line Tools; on Linux/Windows install LLVM and export `LLVM_PATH` if needed. |
-| Optional Python libs | `pefile` (PE parsing) and `pyelftools` (ELF parsing). Installed automatically from `requirements.txt`. |
+The project uses object-oriented polymorphic design:
 
-> **Tip:** Set `LLVM_PATH` to the root of your LLVM install if LLDB cannot be imported automatically. The CLI also exposes a `--llvm-path` flag.
+1. **Abstract Base Class** (`ExecutableAnalyzer`):
+   - Defines the common interface for all analyzers
+   - Contains shared logic (e.g., section table formatting)
+   - Enforces platform-specific method implementation in subclasses
 
-## Installation
+2. **Concrete Implementation Classes**:
+   - `PEAnalyzer`: Handles Windows PE format files
+   - `ELFAnalyzer`: Handles Linux ELF format files
+
+3. **Factory Function** (`create_analyzer`):
+   - Automatically creates the correct analyzer instance based on file type
+   - Simplifies client code
+
+### Class Diagram
+
+```
+ExecutableAnalyzer (ABC)
+├── get_file_type() [abstract]
+├── parse_sections() [abstract]
+├── get_debug_info() [abstract]
+├── write_debug_info() [abstract]
+├── get_sections_output() [abstract]
+├── get_sections() [concrete]
+├── write_sections_table() [concrete]
+└── analyze() [concrete]
+    ↑
+    ├── PEAnalyzer
+    │   ├── Implements PE-specific parsing logic
+    │   └── Handles PDB debug information
+    │
+    └── ELFAnalyzer
+        ├── Implements ELF-specific parsing logic
+        ├── Handles DWARF debug information
+        └── Detects DWARF32/DWARF64 format
+```
+
+## Type Hints
+
+All code includes complete type annotations:
+- Function parameter and return value types
+- Class attribute types
+- Advanced types from the `typing` module (`Optional`, `List`, `Dict`, `Tuple`, `Any`)
+
+## Usage
+
+### As a Command-Line Tool
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+# Run Python script directly
+python src/section_doctor.py <target_executable>
+
+# Or use the packaged binary
+artifact/section_doctor.exe <target_executable>
 ```
 
-LLDB itself is not shipped as a pip dependency. Follow your platform's instructions to install LLVM/LLDB beforehand.
+### As a Python Package
 
-## Quick start
+```python
+from executable_doctor import create_analyzer, get_file_type
 
-### CLI workflow
+# Automatically detect file type and create analyzer
+analyzer = create_analyzer("path/to/executable")
+analyzer.analyze("output_report.txt")
+
+# Or manually create a specific type of analyzer
+from executable_doctor import PEAnalyzer, ELFAnalyzer
+
+pe_analyzer = PEAnalyzer("myapp.exe")
+elf_analyzer = ELFAnalyzer("myapp.elf")
+```
+
+## PyInstaller Packaging
+
+### Build All Scripts
 
 ```bash
-python -m binary_analyzer.cli /path/to/binary
+python builder.py
 ```
 
-Key flags:
+### Key Configuration
 
-- `-o, --output <dir>` — store reports somewhere other than `<binary_dir>/output/`.
-- `-n, --top-functions <N>` — limit the ranked function table (default 200).
-- `--no-source-info` — skip source/line resolution for faster results.
-- `--llvm-path <path>` — point directly at an LLVM install with LLDB bindings.
+Key configuration in builder.py:
+- `--onefile`: Generate a single executable file
+- `--paths src`: Add src directory to Python path to ensure the `executable_doctor` package is found
+- Output directory: `artifact/`
+- Build directory: `build/`
 
-Successful runs print a summary and the path to the generated Markdown report.
+### Packaging Notes
 
-### Library workflow
+Since `section_doctor.py` now depends on the `executable_doctor` package, PyInstaller needs to know the package location:
 
-```python
-from binary_analyzer import BinaryAnalyzer, AnalysisConfig
+1. Use the `--paths` parameter to point to the `src` directory
+2. PyInstaller will automatically analyze imports and package the entire `executable_doctor` package
+3. The generated executable is fully standalone and doesn't require a Python environment
 
-config = AnalysisConfig(top_functions=50, skip_source_info=True)
-analyzer = BinaryAnalyzer(config)
-result = analyzer.full_analysis("/path/to/binary")
+## Dependencies
 
-if result["success"]:
-    print(f"Report saved to: {result['report_path']}")
-```
+- Python 3.7+
+- LLVM toolchain (llvm-readobj must be in PATH)
+- PyInstaller (for packaging)
 
-You can access intermediate steps too:
+## Features
 
-```python
-functions = analyzer.analyze_binary("/path/to/binary")
-sections = analyzer.get_sections_info("/path/to/binary")
-imports = analyzer.get_imports_info("/path/to/binary")
-exports = analyzer.get_exports_info("/path/to/binary")
-```
+### Supported File Formats
 
-## Output anatomy
+- **PE (Portable Executable)**: Windows executable files (.exe, .dll)
+- **ELF (Executable and Linkable Format)**: Linux executable files
 
-- **Markdown report** — `<binary_name>_analysis_report.md` with sections, statistics, and detailed function breakdowns.
-- **CSV exports** — `{binary_name}_imports.csv` and `{binary_name}_exports.csv` when import/export data is discovered.
-- **Default location** — `<binary_dir>/output/` unless overridden via CLI flag or `AnalysisConfig.output_dir`.
+### Analysis Content
 
-## Configuration cheat sheet
+1. **Section Information**:
+   - Section name
+   - File offset
+   - Section size (MB)
+   - Special notes (e.g., DWARF format)
 
-| Option | CLI flag | Description |
-| --- | --- | --- |
-| `llvm_path` | `--llvm-path` | Directory containing LLDB's Python packages. |
-| `top_functions` | `-n / --top-functions` | Number of largest functions to include in the report. |
-| `skip_source_info` | `--no-source-info` | When true, avoids resolving file/line metadata. |
-| `output_dir` | `-o / --output` | Destination directory for reports and CSVs. |
+2. **Debug Information**:
+   - **PE**: PDB file path
+   - **ELF**: 
+     - Internal debug information (.debug_* sections)
+     - External debug file links (.gnu_debuglink)
+     - DWARF format detection (DWARF32/DWARF64)
 
-The same fields are exposed through `AnalysisConfig` for programmatic use.
+## Extensibility
 
-## Project layout
+To add support for new file formats:
 
-```
-src/binary_analyzer/
-├── analyzer.py          # Coordinates LLDB, extraction, and report steps
-├── cli.py               # User-facing command line entry point
-├── imports_exports.py   # Parses PE/ELF import and export tables
-├── sections.py          # Collects section metadata, permissions, and sizes
-├── symbols.py           # Extracts and ranks function-sized symbols
-├── report.py            # Builds Markdown + CSV artifacts
-└── utils.py             # Shared helpers (paths, formatting, validation)
-```
+1. Create a new analyzer class under `executable_doctor/` (e.g., `mach_o_analyzer.py`)
+2. Inherit from `ExecutableAnalyzer` and implement all abstract methods
+3. Add file type detection in `get_file_type()` in `utils.py`
+4. Add factory logic in `create_analyzer()` in `__init__.py`
+5. Export the new class in `__all__` in `__init__.py`
 
-## Troubleshooting
+## License
 
-- **"Error importing LLDB"** — ensure LLVM/LLDB is installed and `LLVM_PATH` points to it, or pass `--llvm-path` via CLI.
-- **Missing import/export data** — install `pefile` and `pyelftools` (already listed in `requirements.txt`).
-- **Permission denied** — verify the binary is readable and you have rights to analyze it.
-
+[Add license information as needed]
